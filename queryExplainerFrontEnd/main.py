@@ -147,7 +147,8 @@ app.layout = html.Div([
     html.Div(id='alt-plan-signatures', style={'display': 'none'}),
     html.Div(id='initial-plan-signatures', style={'display': 'none'}),
     html.Div(id='isHigherSel', style={'display': 'none'}),
-    html.Div(id='isVarying', style= {'display': 'none'})
+    html.Div(id='isVarying', style= {'display': 'none'}),
+    html.Div(id='alias-relation', style= {'display': 'none'})
 
 
 ])
@@ -159,17 +160,19 @@ app.layout = html.Div([
                 State('alt-plan-signatures', 'children'),
                 State("isHigherSel","children"),
                 State('available-variables','value'),
-                State('isVarying','children')
+                State('isVarying','children'),
+                State("alias-relation",'children')
               )
 
-def explanation_output(chosen_relation,init_plan,alt_plan,isHigherSel,chosen_var,isVarying):
+def explanation_output(chosen_relation,init_plan,alt_plan,isHigherSel,chosen_var,isVarying,alias_relation):
 
     if not chosen_relation and not init_plan and not alt_plan and not isHigherSel:
         raise PreventUpdate
 
     else:
-        relation = chosen_relation.split()[0]
-        print("Chosen relation: ",relation)
+        alias_relation_dict = json.loads(alias_relation)
+        isVaryDict = json.loads(isVarying)
+
         print("init : ",init_plan)
         print("alt: ",alt_plan)
         if isHigherSel == "True":
@@ -178,13 +181,15 @@ def explanation_output(chosen_relation,init_plan,alt_plan,isHigherSel,chosen_var
             higherSel = False
 
         print("isHigherSel: ",higherSel)
-        relation_dict = json.loads(isVarying)
-        if relation_dict[relation] == chosen_var:
+
+        actual_relation = alias_relation_dict[chosen_relation]
+
+        if chosen_var in isVaryDict[actual_relation]:
             varying = False
         else:
             varying = True
-        explanation_pos = explainPositionChange(ast.literal_eval(init_plan), ast.literal_eval(alt_plan), relation, varying, higherSel)
-        explanation_join = explainJoinChange(ast.literal_eval(init_plan), ast.literal_eval(alt_plan), relation)
+        explanation_pos = explainPositionChange(ast.literal_eval(init_plan), ast.literal_eval(alt_plan), chosen_relation, varying, higherSel)
+        explanation_join = explainJoinChange(ast.literal_eval(init_plan), ast.literal_eval(alt_plan), chosen_relation)
         if explanation_pos == None and explanation_join == None:
             return "No difference between plans for chosen relation."
         elif explanation_pos and explanation_join:
@@ -196,23 +201,44 @@ def explanation_output(chosen_relation,init_plan,alt_plan,isHigherSel,chosen_var
 
 @app.callback(
                 Output("variable-vertices","children"),
+                Output('alias-relation','children'),
+                Output('isVarying','children'),
                 Input('available-variables','value'),
-                State('node-names','children')
-              )
-def show_vertices(current_var,node_names):
+                State('initial-plan-signatures','children'),
 
-    if not current_var and not node_names:
+              )
+def show_vertices(current_var,init_plan):
+
+    if not current_var and not init_plan:
         raise PreventUpdate
 
     else:
-        variable_names = [x for x in node_names if x not in ["Limit","Sort","Aggregate","Gather Merge","Nested Loop","Hash Join","Hash"]]
-        # print("current_var: ",current_var)
-        # print("node-names: ",variable_names)
+
+        alias_names = [x[0] for x in ast.literal_eval(init_plan)]
+        relation_names = [x[1] for x in ast.literal_eval(init_plan)]
+        alias_relation = {}
+        for i in range(len(alias_names)):
+            alias_relation[alias_names[i]] = relation_names[i]
+
+        isVaryingDict = {"lineitem": ["l_orderkey", "l_partkey", "l_suppkey", "l_linenumber", "l_quantity",
+                        "l_extendedprice","l_discount", "l_tax", "l_shipdate", "l_receipt"],
+                         "customer": ["c_custkey", "c_nationkey", "c_acctbal"],
+                         "nation": ["n_nationkey", "n_regionkey"],
+                         "orders": ["o_orderkey", "o_custkey", "o_totalprice", "o_orderdate", "o_shippingpriority"],
+                         "part":["p_partkey", "p_size", "p_retailprice"],
+                         "partsupp":["ps_partkey", "ps_suppkey", "ps_availqty", "ps_supplycost"],
+                         "region":["r_regionkey"],
+                         "supplier":["supplier", "s_suppkey", "s_nationkey", "s_acctbal"]
+
+                         }
+
+
+
         return [dcc.Dropdown(
             id = "all-vertice-variables",
-            options=[{'label': i, 'value': i} for i in variable_names],
+            options=[{'label': i, 'value': i} for i in alias_names],
             placeholder="Choose a vertice for explanation...",
-        )]
+        )],json.dumps(alias_relation),json.dumps(isVaryingDict)
 
 
 
@@ -226,7 +252,7 @@ def show_chosen_selectivity(query,value):
     if not query or not value:
         raise PreventUpdate
     else:
-        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
         cur = conn.cursor()
         cur.execute("EXPLAIN " + query)
         rows = cur.fetchall()
@@ -261,7 +287,7 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
     # signatures_global = []
     if in_clicks and query:
 
-        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
         cur = conn.cursor()
         # update new selectivity
         new_sel = float(sel_value[13:len(sel_value)-2])/100+0.1
@@ -357,7 +383,7 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
                 return dcc.Graph(id='tree',figure=fig),str(signatures_global),"Alt Selectivity: "+str(round(new_sel*100,1))+"%","True"
             new_sel +=0.1
     elif d_clicks and query:
-        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
         cur = conn.cursor()
         # update new selectivity
         new_sel = float(sel_value[13:len(sel_value) - 2]) / 100 - 0.1
@@ -457,7 +483,6 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
               Output('node-names','children'),
               Output('initial-query-plan','children'),
               Output('initial-plan-signatures','children'),
-              Output('isVarying','children'),
               Input('sql-file', 'contents'),
               )
 def update_output(contents):
@@ -484,7 +509,7 @@ def update_output(contents):
         base64_bytes = base64_message.encode('ascii')
         message_bytes = base64.b64decode(base64_bytes)
         file = message_bytes.decode('ascii')
-        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
         cur = conn.cursor()
         cur.execute("EXPLAIN (FORMAT JSON) "+file)
         rows = cur.fetchall()
@@ -573,19 +598,19 @@ def update_output(contents):
         sel_arr = getSelectivityArray(rows,cur)
         print("selectivity array: ",sel_arr)
         available_variables = [x[1] for x in sel_arr[0]]
-        all_relations = [x[0] for x in sel_arr[0]]
-        corr_relations = {}
-        for i in range(len(available_variables)):
-            corr_relations[all_relations[i]] = available_variables[i]
+        # all_relations = [x[0] for x in sel_arr[0]]
+        # corr_relations = {}
+        # for i in range(len(available_variables)):
+        #     corr_relations[all_relations[i]] = available_variables[i]
         # selectivity_variables = [x[2] for x in sel_arr[1]]
 
         conn.close()
 
-        return dcc.Graph(id='tree',figure=fig),[{'label': i, 'value': i} for i in available_variables],file,node_names,json.dumps(query_plan),str(signatures_global),json.dumps(corr_relations)
+        return dcc.Graph(id='tree',figure=fig),[{'label': i, 'value': i} for i in available_variables],file,node_names,json.dumps(query_plan),str(signatures_global)
 
 app.css.append_css({
     'external_url': 'https://codepen.io/chriddyp/pen/bWLwgP.css'
 })
 
 if __name__ == '__main__':
-    app.run_server(debug = True)
+    app.run_server()
