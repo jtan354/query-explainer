@@ -58,6 +58,9 @@ def explainPositionChange(chosen, alt, alias, isVarying, isHigherSel):
     for element in alt:
         if element[0] == alias:
             alt = element
+    
+    print(chosen)
+    print(alt)
 
     if isVarying and isHigherSel:
         if chosen[2] > alt[2]:
@@ -82,6 +85,9 @@ def explainJoinChange(chosen, alt, alias):
     for element in alt:
         if element[0] == alias:
             alt = element
+    
+    print(chosen)
+    print(alt)
 
     if alt[3] == "Hash Join" and chosen[3] == "Nested Loop" and chosen[4] == "Inner" and chosen[
         5] == "Index Scan":  # if Hash Join >>> Nested Loop Inner

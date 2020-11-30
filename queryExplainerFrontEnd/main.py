@@ -226,7 +226,7 @@ def show_chosen_selectivity(query,value):
     if not query or not value:
         raise PreventUpdate
     else:
-        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
         cur = conn.cursor()
         cur.execute("EXPLAIN " + query)
         rows = cur.fetchall()
@@ -257,11 +257,11 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
     global joinOnlyCounter
     global joins_global
     global signatures_global
-    joins_global = []
-    signatures_global = []
+    # joins_global = []
+    # signatures_global = []
     if in_clicks and query:
 
-        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
         cur = conn.cursor()
         # update new selectivity
         new_sel = float(sel_value[13:len(sel_value)-2])/100+0.1
@@ -275,8 +275,10 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
             rows = cur.fetchall()
             new_query_plan = rows[0][0][0]
             counter = 1
-            operations = []
+            operations = list()
             joinOnlyCounter = 1
+            signatures_global = []
+            joins_global = []
             ####### Generate initial tree #######
             generateOpSeq(new_query_plan['Plan'], -1)
             # print("operations for new-query: ", operations)
@@ -352,10 +354,10 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
                 print("Alternate Graph created.")
                 fig = go.FigureWidget(fig)
                 conn.close()
-                return dcc.Graph(id='tree',figure=fig),str(signatures),"Alt Selectivity: "+str(round(new_sel*100,1))+"%","True"
+                return dcc.Graph(id='tree',figure=fig),str(signatures_global),"Alt Selectivity: "+str(round(new_sel*100,1))+"%","True"
             new_sel +=0.1
     elif d_clicks and query:
-        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
         cur = conn.cursor()
         # update new selectivity
         new_sel = float(sel_value[13:len(sel_value) - 2]) / 100 - 0.1
@@ -371,6 +373,8 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
             counter = 1
             operations = []
             joinOnlyCounter = 1
+            signatures_global = []
+            joins_global = []
             ####### Generate initial tree #######
 
             exploreChildren(new_query_plan['Plan'])
@@ -480,7 +484,7 @@ def update_output(contents):
         base64_bytes = base64_message.encode('ascii')
         message_bytes = base64.b64decode(base64_bytes)
         file = message_bytes.decode('ascii')
-        conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
+        conn = psycopg2.connect(database="TPC-H", user="postgres", password="justin", host="localhost", port="5432")
         cur = conn.cursor()
         cur.execute("EXPLAIN (FORMAT JSON) "+file)
         rows = cur.fetchall()
