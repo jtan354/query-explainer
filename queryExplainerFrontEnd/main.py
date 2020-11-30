@@ -15,6 +15,8 @@ from dash.exceptions import PreventUpdate
 counter = 1
 operations = list()
 joinOnlyCounter = 1
+signatures_global = []
+joins_global = []
 
 
 def generateOpSeq(subRoot, parentIndex):  # note the use of global variables, sorry about that
@@ -48,45 +50,46 @@ def generateOpSeq(subRoot, parentIndex):  # note the use of global variables, so
     return
 
 
-def exploreChildren(subRoot,signatures,joins):
+def exploreChildren(subRoot):
     global counter
+    global signatures_global
+    global joins_global
 
     if ("Join" in subRoot["Node Type"] or "Nested" in subRoot["Node Type"]):
-        joins.append(subRoot["Node Type"])
-    # print(subRoot["Node Type"])
+        joins_global.append(subRoot["Node Type"])
 
     for child in subRoot["Plans"]:
         if "Alias" not in child and len(child["Plans"]) > 1:  # if this child is a leaf node, skip this first
             # if len(child["Plans"]) > 1: # explore the child that has more than one child first
-            # print("adding " + child["Node Type"])
-            exploreChildren(child,signatures,joins)
+            print("adding " + child["Node Type"])
+            exploreChildren(child)
     for child in subRoot["Plans"]:
         if "Alias" not in child and len(child["Plans"]) == 1 and "Alias" not in child["Plans"][0]:
-            # print("adding " + child["Node Type"])
-            exploreChildren(child,signatures,joins)
+            print("adding " + child["Node Type"])
+            exploreChildren(child)
     for child in subRoot["Plans"]:
         if "Alias" not in child and len(child["Plans"]) == 1 and "Alias" in child["Plans"][0]:
-            # print("adding " + child["Node Type"])
-            exploreChildren(child,signatures,joins)
+            print("adding " + child["Node Type"])
+            exploreChildren(child)
     for child in subRoot["Plans"]:
         if "Alias" in child and "Plans" in child:
-            # print("adding " + child["Node Type"])
-            exploreChildren(child,signatures,joins)
+            print("adding " + child["Node Type"])
+            exploreChildren(child)
     for child in subRoot["Plans"]:
         if "Alias" in child and "Plans" not in child:
-            # print("adding " + child["Node Type"])
-            if (len(joins) >= 1):
-                signatures.append(
-                    [child["Alias"], child["Relation Name"], counter, joins[-1], child["Parent Relationship"],
+            print("adding " + child["Node Type"])
+            if (len(joins_global) >= 1):
+                signatures_global.append(
+                    [child["Alias"], child["Relation Name"], counter, joins_global[-1], child["Parent Relationship"],
                      child["Node Type"]])
             else:
-                signatures.append([child["Alias"], child["Relation Name"], counter, None, child["Parent Relationship"],
+                signatures_global.append([child["Alias"], child["Relation Name"], counter, None, child["Parent Relationship"],
                                    child["Node Type"]])
 
     # once it is here, this node has transversed all its children
     if ("Join" in subRoot["Node Type"] or "Nested" in subRoot["Node Type"]):
         counter += 1
-        joins.pop()
+        joins_global.pop()
     # print(signatures)
     return
 
@@ -249,11 +252,15 @@ def show_chosen_selectivity(query,value):
             State('node-names','children')
             )
 def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,original_query_plan,original_node_names):
-
+    global operations
+    global counter
+    global joinOnlyCounter
+    global joins_global
+    global signatures_global
+    joins_global = []
+    signatures_global = []
     if in_clicks and query:
-        global operations
-        global counter
-        global joinOnlyCounter
+
         conn = psycopg2.connect(database="TPC-H", user="root", password="password", host="localhost", port="5432")
         cur = conn.cursor()
         # update new selectivity
@@ -274,9 +281,10 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
             generateOpSeq(new_query_plan['Plan'], -1)
             # print("operations for new-query: ", operations)
             G, node_names = generateIGraph(operations)
-            joins = []
-            signatures = []
-            exploreChildren(new_query_plan['Plan'], signatures, joins)
+            exploreChildren(new_query_plan['Plan'])
+            print("new joins: ",joins_global)
+            print("new signatures: ",signatures_global)
+
 
             if node_names!=original_node_names:
 
@@ -364,9 +372,8 @@ def selectivity(in_clicks,d_clicks,query,sel_value,relation,value,isDate,origina
             operations = []
             joinOnlyCounter = 1
             ####### Generate initial tree #######
-            joins = []
-            signatures = []
-            exploreChildren(new_query_plan['Plan'], signatures, joins)
+
+            exploreChildren(new_query_plan['Plan'])
             generateOpSeq(new_query_plan['Plan'], -1)
             # print("operations for new-query: ", operations)
             G, node_names = generateIGraph(operations)
@@ -455,10 +462,14 @@ def update_output(contents):
     global counter
     global joinOnlyCounter
     global available_variables
+    global joins_global
+    global signatures_global
     available_variables = []
     counter= 1
     operations = []
     joinOnlyCounter = 1
+    joins_global = []
+    signatures_global = []
 
     if not contents:
         raise PreventUpdate
@@ -476,10 +487,10 @@ def update_output(contents):
         query_plan = rows[0][0][0]
 
         ########## Explore Children ##########
-        joins = []
-        signatures = []
-        exploreChildren(query_plan['Plan'],signatures,joins)
 
+        exploreChildren(query_plan['Plan'])
+        print("Joins original:",joins_global)
+        print("Signatures original: ",signatures_global)
 
         ####### Generate initial tree #######
         generateOpSeq(query_plan['Plan'], -1)
@@ -566,7 +577,7 @@ def update_output(contents):
 
         conn.close()
 
-        return dcc.Graph(id='tree',figure=fig),[{'label': i, 'value': i} for i in available_variables],file,node_names,json.dumps(query_plan),str(signatures),json.dumps(corr_relations)
+        return dcc.Graph(id='tree',figure=fig),[{'label': i, 'value': i} for i in available_variables],file,node_names,json.dumps(query_plan),str(signatures_global),json.dumps(corr_relations)
 
 app.css.append_css({
     'external_url': 'https://codepen.io/chriddyp/pen/bWLwgP.css'
